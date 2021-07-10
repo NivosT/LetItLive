@@ -4,6 +4,15 @@
     "name": "Arduino MKR WiFi 1010",
     "type": "serial"
   },
-  "secrets": [],
+  "secrets": [
+    {
+      "name": "SECRET_SSID",
+      "value": ""
+    },
+    {
+      "name": "SECRET_PASS",
+      "value": ""
+    }
+  ],
   "included_libs": []
 }
