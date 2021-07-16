@@ -1,12 +1,19 @@
+#include <Arduino_MKRIoTCarrier.h>
+#include <Arduino_MKRIoTCarrier_Buzzer.h>
+#include <Arduino_MKRIoTCarrier_Qtouch.h>
+#include <Arduino_MKRIoTCarrier_Relay.h>
+
 #include "arduino_secrets.h"
 #include "thingProperties.h"
-#include <Arduino_MKRIoTCarrier.h>
 #include <arduino-timer.h>
 
 #define AirValue 1023
 #define MoisterValue 700
 #define MoisterPin A5
 #define HOUR_IN_MILIS 3600000
+#define MIN_IN_MILIS 60000
+#define INT_MAX 2147483647
+
 MKRIoTCarrier carrier;
 
 // Globals
@@ -14,15 +21,37 @@ int counter = 0;
 int totalLight = 0;
 float totalTemperature = 0;
 float totalHumidity = 0;
+int displayState = -2;
+int moistState = 0;
+int lightState = 0;
+
+int page = 0;
 
 //Enums
-const int SHADOW_LOVING = 1;
-const int BRIGHT_AND_INDIRECT = 2;
-const int BRIGHT_LIGHT = 4;
-const int STRONG_DIRECT = 8;
-const int LOVES_WET_SOIL = 16; 
-const int LOVES_MOIST_SOIL = 32;
-const int LOVES_DRY = 64;
+const int LIGHT_CONFIG = -1;
+const int SHADOW_LOVING = 0;
+const int BRIGHT_AND_INDIRECT = 1;
+const int BRIGHT_LIGHT = 2;
+const int STRONG_DIRECT = 3;
+
+const int MOIST_CONFIG = -1;
+const int LOVES_WET_SOIL = 0; 
+const int LOVES_MOIST_SOIL = 1;
+const int LOVES_DRY = 2;
+
+const int DISPLAY_CONFIG_LIGHT = -2;
+const int DISPLAY_CONFIG_MOIST = -1;
+const int DISPLAY_OFF = 0;
+const int DISPLAY_ON = 1;
+const int DISPLAY_DEFAULT = 0;
+const int DISPLAY_LIGHT = 1;
+const int DISPLAY_MOIST = 2;
+
+const int DEFAULT_PAGE = 0;
+const int TEMP_PAGE = 1;
+const int HUMIDITY_PAGE = 2;
+const int MOIST_PAGE = 3;
+const int LIGHT_PAGE = 4;
 
 auto timer = timer_create_default();
 
@@ -53,10 +82,9 @@ void setup()
     delay(500);
   }
   
-  //TODO - temp init, to be removed when Niv fixes carrier menu
-  setRanges(72);
+  displayState = DISPLAY_CONFIG_LIGHT;
 
-  timer.every(HOUR_IN_MILIS, checkAndAlertValues);
+  timer.every(MIN_IN_MILIS, checkAndAlertValues);
   
   CARRIER_CASE = false; //TODO - to be changed when done
   carrier.begin();
@@ -64,9 +92,23 @@ void setup()
 
 void loop() 
 { 
+  carrier.Buttons.update();
   timer.tick();
   ArduinoCloud.update();
 
+  if (carrier.Button1.getTouch()) {
+    toggleDisplayState();
+  }
+  else if (carrier.Button2.getTouch()) {
+    toggleLightConfig();
+  }
+  else if (carrier.Button3.getTouch()) {
+    toggleMoistConfig();
+  }
+  else {
+    displayPage(NULL);
+  }
+  
   delay(1000);
 }
 
@@ -150,11 +192,10 @@ void onAverageHumidityChange() {
   // Do something
 }
 
-void setRanges(int carrier_input)
+void setRanges()
 /** set the ranges of required light & soil moister **/
 {
-  int res = carrier_input & 15;
-  switch(res)
+  switch(lightState)
   {
     case SHADOW_LOVING:
       minLight = 5000;
@@ -177,8 +218,7 @@ void setRanges(int carrier_input)
       break;
   }
   
-  res = carrier_input & 112;
-  switch(res)
+  switch(moistState)
   {
     case LOVES_WET_SOIL:
       minMoist = 41;
@@ -195,4 +235,158 @@ void setRanges(int carrier_input)
       maxMoist = 40;
       break;
   }
+}
+
+void displayPage(char msg[]) {
+  switch (displayState) {
+    case DISPLAY_ON:
+      switch (page) {
+        case TEMP_PAGE:
+          printValue("Temp", temperature, DISPLAY_DEFAULT);
+          break;
+        case HUMIDITY_PAGE:
+          printValue("Humi", humidity, DISPLAY_DEFAULT);
+          break;
+        case MOIST_PAGE:
+          printValue("Moist", moistPrecentage, DISPLAY_MOIST);
+          break;
+        case LIGHT_PAGE:
+          printValue("Light", light, DISPLAY_LIGHT);
+          break;
+        default:
+          break;
+      }
+      page = (page + 1) % 6;
+      break;
+      
+    case DISPLAY_OFF:
+      printMessage(msg);
+      break;
+    
+    case DISPLAY_CONFIG_MOIST:
+      printMessage("Config Moisture\n  use button 3");
+      break;
+    
+    case DISPLAY_CONFIG_LIGHT:
+      printMessage("Config Light\n  use button 2");
+      break;
+    }
+}
+
+void printMessage(char *msg) {
+  carrier.display.fillScreen(ST77XX_BLACK); 
+  carrier.display.setTextColor(ST77XX_WHITE);
+  carrier.display.setTextSize(2); //medium sized text
+  carrier.display.setCursor(20, 110); //sets position for printing (x and y)
+  carrier.display.print(msg);
+}
+
+void printValue(char header[], int val, int displayMode) {
+  int min, max;
+  
+  switch(displayMode) {
+    case DISPLAY_LIGHT:
+      min = minLight;
+      max = maxLight;
+      break;
+    
+    case DISPLAY_MOIST:
+      min = minMoist;
+      max = maxMoist;
+      break;
+      
+    default:
+      min = -1;
+      max = INT_MAX;
+      break;
+  }
+  
+  if (min > val || max < val) {
+    //configuring display, setting background color, text size and text color
+    carrier.display.fillScreen(ST77XX_RED); 
+    carrier.display.setTextColor(ST77XX_WHITE); //white text
+  }
+  else {
+    carrier.display.fillScreen(ST77XX_GREEN); 
+    carrier.display.setTextColor(ST77XX_BLACK); //black text
+  }
+  
+  carrier.display.setTextSize(2); //medium sized text
+  carrier.display.setCursor(20, 110); //sets position for printing (x and y)
+  carrier.display.print(header);
+  carrier.display.print(": ");
+  carrier.display.println(val);
+  
+  delay(1000);
+}
+
+void toggleDisplayState() {
+  char *msg;
+  if (displayState == DISPLAY_ON){
+    msg = "Display off..";
+    page = 0;
+  }
+  else {
+    msg = "Display on..";
+    page = 1;
+  }
+  displayState = ((displayState + 1) % 2); 
+  printMessage(msg);
+}
+
+void toggleMoistConfig() {
+  moistState = (moistState + 1) % 3;
+  setRanges();
+  char out[1024] = "Moisture set to:\n  ";
+  printMessage(strcat(out, getMoistStr()));
+  if (displayState < 0) {
+    displayState = 1;
+  }
+}
+
+void toggleLightConfig() {
+  lightState = (lightState + 1) % 4;
+  setRanges();
+  char out[1024] = "Light set to:\n  ";
+  printMessage(strcat(out, getLightStr()));
+  if (displayState < 0) {
+    displayState = -1;
+  }
+}
+
+char* getMoistStr() {
+  char* res;
+  switch(moistState) {
+    case LOVES_WET_SOIL:
+      res = "Wet Soil";
+      break;
+    case LOVES_MOIST_SOIL:
+      res = "Moist Soil";
+      break;
+    case LOVES_DRY:
+      res = "Dry Soil";
+      break;
+  }
+  
+  return res;
+}
+
+char* getLightStr() {
+  char* res;
+  switch(lightState) {
+    case SHADOW_LOVING:
+      res = "Shadowed";
+      break;
+    case BRIGHT_AND_INDIRECT:
+      res = "Bright & Indirect";
+      break;
+    case BRIGHT_LIGHT:
+      res = "Bright light";
+      break;
+    case STRONG_DIRECT:
+      res = "Direct Light";
+      break;
+  }
+  
+  return res;
 }
