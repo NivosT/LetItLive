@@ -1,9 +1,22 @@
+// ArduinoOTA - Version: Latest 
+#include <ArduinoOTA.h>
+
+// Blynk - Version: Latest 
+#include <Blynk.h>
+#include <SPI.h>
+
+//extra Blynk libs
+#include <WiFiNINA.h>
+#include <BlynkSimpleWiFiNINA.h>
+
+// WiFiNINA - Version: Latest 
+#include <WiFiNINA.h>
+
 #include <Arduino_MKRIoTCarrier.h>
 #include <Arduino_MKRIoTCarrier_Buzzer.h>
 #include <Arduino_MKRIoTCarrier_Qtouch.h>
 #include <Arduino_MKRIoTCarrier_Relay.h>
 
-#include "arduino_secrets.h"
 #include "thingProperties.h"
 #include <arduino-timer.h>
 
@@ -15,6 +28,9 @@
 #define INT_MAX 2147483647
 
 MKRIoTCarrier carrier;
+char blynkAuthToken[] = "LdJJ6g7tCxAxc2Bz8GVQ5OYtK2ujBdxP"; // new************************
+char ssid[] = "Zift";                                        // new************************
+char pass[] = "ziftabook";                                  // new************************
 
 // Globals
 int counter = 0;
@@ -87,6 +103,9 @@ void setup()
   timer.every(MIN_IN_MILIS, checkAndAlertValues);
   
   CARRIER_CASE = false; //TODO - to be changed when done
+  
+  Blynk.begin(blynkAuthToken, ssid, pass, IPAddress(3,9,144,235), 8080); // new************************
+  
   carrier.begin();
 }
 
