@@ -1,3 +1,12 @@
+#include "arduino_secrets.h"
+#include <Arduino_MKRIoTCarrier.h>
+#include <Arduino_MKRIoTCarrier_Buzzer.h>
+#include <Arduino_MKRIoTCarrier_Qtouch.h>
+#include <Arduino_MKRIoTCarrier_Relay.h>
+
+#include "thingProperties.h"
+#include <arduino-timer.h>
+
 // ArduinoOTA - Version: Latest 
 #include <ArduinoOTA.h>
 
@@ -9,17 +18,6 @@
 #include <WiFiNINA.h>
 #include <BlynkSimpleWiFiNINA.h>
 
-// WiFiNINA - Version: Latest 
-#include <WiFiNINA.h>
-
-#include <Arduino_MKRIoTCarrier.h>
-#include <Arduino_MKRIoTCarrier_Buzzer.h>
-#include <Arduino_MKRIoTCarrier_Qtouch.h>
-#include <Arduino_MKRIoTCarrier_Relay.h>
-
-#include "thingProperties.h"
-#include <arduino-timer.h>
-
 #define AirValue 1023
 #define MoisterValue 700
 #define MoisterPin A5
@@ -27,10 +25,8 @@
 #define MIN_IN_MILIS 60000
 #define INT_MAX 2147483647
 
+
 MKRIoTCarrier carrier;
-char blynkAuthToken[] = "LdJJ6g7tCxAxc2Bz8GVQ5OYtK2ujBdxP"; // new************************
-char ssid[] = "Zift";                                        // new************************
-char pass[] = "ziftabook";                                  // new************************
 
 // Globals
 int counter = 0;
@@ -69,11 +65,14 @@ const int HUMIDITY_PAGE = 2;
 const int MOIST_PAGE = 3;
 const int LIGHT_PAGE = 4;
 
+int buttonState = 0; //0- configLight; 1- configMoist, 2- finshed config
+bool allowScreenOff = false;
 auto timer = timer_create_default();
 
 //define the globals with the min/max values for moister & light
 int minLight, maxLight, minMoist, maxMoist;
 
+char blynkAuthToken[] = "LdJJ6g7tCxAxc2Bz8GVQ5OYtK2ujBdxP";
 
 void setup() 
 {
@@ -102,11 +101,10 @@ void setup()
 
   timer.every(MIN_IN_MILIS, checkAndAlertValues);
   
-  CARRIER_CASE = false; //TODO - to be changed when done
-  
-  Blynk.begin(blynkAuthToken, ssid, pass, IPAddress(3,9,144,235), 8080); // new************************
-  
+  CARRIER_CASE = true; //TODO - to be changed when done
+  // Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(3,9,144,235), 8080);
   carrier.begin();
+  sampleData();
 }
 
 void loop() 
@@ -114,20 +112,67 @@ void loop()
   carrier.Buttons.update();
   timer.tick();
   ArduinoCloud.update();
-
-  if (carrier.Button1.getTouch()) {
+  //TODO - delete
+  // Serial.println(buttonState);
+  
+  if(allowScreenOff && carrier.Button1.getTouch())
+  {
     toggleDisplayState();
   }
-  else if (carrier.Button2.getTouch()) {
-    toggleLightConfig();
-  }
-  else if (carrier.Button3.getTouch()) {
-    toggleMoistConfig();
-  }
-  else {
-    displayPage(NULL);
+  else
+  {
+    switch(buttonState)
+    {
+      case 0 :
+        if (carrier.Button2.getTouch()) 
+        {
+          toggleLightConfig();
+        }
+        else if (carrier.Button3.getTouch())
+        {
+          buttonState = 1;
+          toggleMoistConfig();
+        }
+        else
+        {
+          // printMessage("Light config:\n  2-next\n  3- accept");
+        }
+        break;
+    
+      case 1:
+        if (carrier.Button2.getTouch()) 
+        {
+          toggleMoistConfig();
+        }
+        else if (carrier.Button3.getTouch()) 
+        {
+          buttonState = 2;
+          allowScreenOff = true;
+          // start showing info
+        }
+        else
+        {
+        // printMessage("Moist config:\n  2-next\n  3- accept");
+        }
+        break;
+  
+      case 2:
+        if (carrier.Button2.getTouch())
+        {
+          buttonState = 0;
+          allowScreenOff = false;
+        }
+        else
+        {
+          displayPage(NULL);
+        }
+        
+        break;
+      }
   }
   
+  
+    
   delay(1000);
 }
 
@@ -279,24 +324,34 @@ void displayPage(char msg[]) {
       break;
       
     case DISPLAY_OFF:
-      printMessage(msg);
-      break;
-    
-    case DISPLAY_CONFIG_MOIST:
-      printMessage("Config Moisture\n  use button 3");
-      break;
-    
-    case DISPLAY_CONFIG_LIGHT:
-      printMessage("Config Light\n  use button 2");
+      printMessage(msg, false);
       break;
     }
 }
 
-void printMessage(char *msg) {
+void printMessage(char *msg, bool isMoistOrLight) {
   carrier.display.fillScreen(ST77XX_BLACK); 
   carrier.display.setTextColor(ST77XX_WHITE);
   carrier.display.setTextSize(2); //medium sized text
-  carrier.display.setCursor(20, 110); //sets position for printing (x and y)
+  int x = strlen(msg);
+  char *token = strtok(msg, "\n");
+  if(isMoistOrLight)
+  {
+    carrier.display.setCursor(48, 50);
+    carrier.display.println("Next - click 2");
+    carrier.display.setCursor(28, 70);
+    carrier.display.println("Confirm - click 3");
+    x = strlen(token);
+    carrier.display.setCursor(120 - x/2, 110);
+    Serial.println(token);
+    carrier.display.println(token);
+    msg = strtok(NULL, "\n");
+    Serial.println(msg);
+    x = strlen(msg);
+    // Serial.println(msg)
+    
+  }
+  carrier.display.setCursor(120 - x/2, 140); //sets position for printing (x and y)
   carrier.display.print(msg);
 }
 
@@ -350,14 +405,15 @@ void toggleDisplayState() {
     page = 1;
   }
   displayState = ((displayState + 1) % 2); 
-  printMessage(msg);
+  printMessage(msg, false);
 }
 
 void toggleMoistConfig() {
   moistState = (moistState + 1) % 3;
   setRanges();
-  char out[1024] = "Moisture set to:\n  ";
-  printMessage(strcat(out, getMoistStr()));
+  char out[1024] = "Set moist to:\n";
+  
+  printMessage(strcat(out, getMoistStr()), true);
   if (displayState < 0) {
     displayState = 1;
   }
@@ -366,8 +422,8 @@ void toggleMoistConfig() {
 void toggleLightConfig() {
   lightState = (lightState + 1) % 4;
   setRanges();
-  char out[1024] = "Light set to:\n  ";
-  printMessage(strcat(out, getLightStr()));
+  char out[1024] = "Set light to:\n";
+  printMessage(strcat(out, getLightStr()), true);
   if (displayState < 0) {
     displayState = -1;
   }
@@ -377,35 +433,37 @@ char* getMoistStr() {
   char* res;
   switch(moistState) {
     case LOVES_WET_SOIL:
-      res = "Wet Soil";
+      res = "Wet Soil\n";
       break;
     case LOVES_MOIST_SOIL:
-      res = "Moist Soil";
+      res = "Moist Soil\n";
       break;
     case LOVES_DRY:
-      res = "Dry Soil";
+      res = "Dry Soil\n";
       break;
   }
   
   return res;
 }
 
-char* getLightStr() {
+char* getLightStr()
+{
   char* res;
   switch(lightState) {
     case SHADOW_LOVING:
-      res = "Shadowed";
+      res = "Shadowed\n";
       break;
     case BRIGHT_AND_INDIRECT:
-      res = "Bright & Indirect";
+      res = "Bright & Indirect\n";
       break;
     case BRIGHT_LIGHT:
-      res = "Bright light";
+      res = "Bright light\n";
       break;
     case STRONG_DIRECT:
-      res = "Direct Light";
+      res = "Direct Light\n";
       break;
   }
   
   return res;
 }
+
