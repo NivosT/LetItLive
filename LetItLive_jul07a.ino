@@ -306,13 +306,13 @@ void displayPage(char msg[]) {
     case DISPLAY_ON:
       switch (page) {
         case TEMP_PAGE:
-          printValue("Temp", temperature, DISPLAY_DEFAULT);
+          printValue(" Temp", temperature, DISPLAY_DEFAULT);
           break;
         case HUMIDITY_PAGE:
-          printValue("Humi", humidity, DISPLAY_DEFAULT);
+          printValue(" Humi", humidity, DISPLAY_DEFAULT);
           break;
         case MOIST_PAGE:
-          printValue("Moist", moistPrecentage, DISPLAY_MOIST);
+          printValue(" Moist", moistPrecentage, DISPLAY_MOIST);
           break;
         case LIGHT_PAGE:
           printValue("Light", light, DISPLAY_LIGHT);
@@ -337,21 +337,22 @@ void printMessage(char *msg, bool isMoistOrLight) {
   char *token = strtok(msg, "\n");
   if(isMoistOrLight)
   {
-    carrier.display.setCursor(48, 50);
+    carrier.display.setCursor(35, 50);
     carrier.display.println("Next - click 2");
-    carrier.display.setCursor(28, 70);
+    carrier.display.setCursor(15, 70);
     carrier.display.println("Confirm - click 3");
     x = strlen(token);
-    carrier.display.setCursor(120 - x/2, 110);
+    carrier.display.setCursor(0, 110);
     Serial.println(token);
     carrier.display.println(token);
     msg = strtok(NULL, "\n");
+    carrier.display.setTextColor(ST77XX_GREEN);
     Serial.println(msg);
     x = strlen(msg);
-    // Serial.println(msg)
+    Serial.println(msg);
     
   }
-  carrier.display.setCursor(120 - x/2, 140); //sets position for printing (x and y)
+  carrier.display.setCursor(0, 140); //sets position for printing (x and y)
   carrier.display.print(msg);
 }
 
@@ -375,6 +376,7 @@ void printValue(char header[], int val, int displayMode) {
       break;
   }
   
+  
   if (min > val || max < val) {
     //configuring display, setting background color, text size and text color
     carrier.display.fillScreen(ST77XX_RED); 
@@ -385,7 +387,7 @@ void printValue(char header[], int val, int displayMode) {
     carrier.display.setTextColor(ST77XX_BLACK); //black text
   }
   
-  carrier.display.setTextSize(2); //medium sized text
+  carrier.display.setTextSize(3); //medium sized text
   carrier.display.setCursor(20, 110); //sets position for printing (x and y)
   carrier.display.print(header);
   carrier.display.print(": ");
@@ -411,7 +413,7 @@ void toggleDisplayState() {
 void toggleMoistConfig() {
   moistState = (moistState + 1) % 3;
   setRanges();
-  char out[1024] = "Set moist to:\n";
+  char out[1024] = "   Set moist to:\n";
   
   printMessage(strcat(out, getMoistStr()), true);
   if (displayState < 0) {
@@ -422,7 +424,7 @@ void toggleMoistConfig() {
 void toggleLightConfig() {
   lightState = (lightState + 1) % 4;
   setRanges();
-  char out[1024] = "Set light to:\n";
+  char out[1024] = "    Set light to:\n";
   printMessage(strcat(out, getLightStr()), true);
   if (displayState < 0) {
     displayState = -1;
@@ -433,13 +435,13 @@ char* getMoistStr() {
   char* res;
   switch(moistState) {
     case LOVES_WET_SOIL:
-      res = "Wet Soil\n";
+      res = "      Wet Soil\n";
       break;
     case LOVES_MOIST_SOIL:
-      res = "Moist Soil\n";
+      res = "     Moist Soil\n";
       break;
     case LOVES_DRY:
-      res = "Dry Soil\n";
+      res = "      Dry Soil\n";
       break;
   }
   
@@ -451,16 +453,16 @@ char* getLightStr()
   char* res;
   switch(lightState) {
     case SHADOW_LOVING:
-      res = "Shadowed\n";
+      res = "      Shadowed\n";
       break;
     case BRIGHT_AND_INDIRECT:
-      res = "Bright & Indirect\n";
+      res = " Bright & Indirect\n";
       break;
     case BRIGHT_LIGHT:
-      res = "Bright light\n";
+      res = "    Bright light\n";
       break;
     case STRONG_DIRECT:
-      res = "Direct Light\n";
+      res = "    Direct Light\n";
       break;
   }
   
