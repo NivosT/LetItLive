@@ -1,4 +1,3 @@
-#include "arduino_secrets.h"
 #include <Arduino_MKRIoTCarrier.h>
 #include <Arduino_MKRIoTCarrier_Buzzer.h>
 #include <Arduino_MKRIoTCarrier_Qtouch.h>
@@ -7,10 +6,10 @@
 #include "thingProperties.h"
 #include <arduino-timer.h>
 
-// ArduinoOTA - Version: Latest 
+// ArduinoOTA - Version: Latest
 #include <ArduinoOTA.h>
 
-// Blynk - Version: Latest 
+// Blynk - Version: Latest
 #include <Blynk.h>
 #include <SPI.h>
 
@@ -26,6 +25,20 @@
 #define INT_MAX 2147483647
 
 
+// Pins for Blynk
+#define soilConfigVirtualPin V0
+#define lightConfigVirtualPin V1
+#define displayVirtualPin V2
+#define notificationPin V3
+#define humidityVirtualPin V5
+#define temperatureVirtualPin V6
+#define lightVirtualPin V7
+#define moistPercVirtualPin V8
+#define averageTempVirtualPin V9
+#define averageLightVirtualPin V10
+#define averageHumidityVirtualPin V11
+
+
 MKRIoTCarrier carrier;
 
 // Globals
@@ -36,8 +49,8 @@ float totalHumidity = 0;
 int displayState = -2;
 int moistState = 0;
 int lightState = 0;
-
 int page = 0;
+bool showNotification = true;
 
 //Enums
 const int LIGHT_CONFIG = -1;
@@ -47,7 +60,7 @@ const int BRIGHT_LIGHT = 2;
 const int STRONG_DIRECT = 3;
 
 const int MOIST_CONFIG = -1;
-const int LOVES_WET_SOIL = 0; 
+const int LOVES_WET_SOIL = 0;
 const int LOVES_MOIST_SOIL = 1;
 const int LOVES_DRY = 2;
 
@@ -65,6 +78,9 @@ const int HUMIDITY_PAGE = 2;
 const int MOIST_PAGE = 3;
 const int LIGHT_PAGE = 4;
 
+const int NOTIFICATION_OFF = 0;
+const int NOTIFICATION_ON = 1;
+
 int buttonState = 0; //0- configLight; 1- configMoist, 2- finshed config
 bool allowScreenOff = false;
 auto timer = timer_create_default();
@@ -72,9 +88,9 @@ auto timer = timer_create_default();
 //define the globals with the min/max values for moister & light
 int minLight, maxLight, minMoist, maxMoist;
 
-char blynkAuthToken[] = "LdJJ6g7tCxAxc2Bz8GVQ5OYtK2ujBdxP";
+char blynkAuthToken[] = "pnr6Z7Usxd8d9gGMoUrSrQ917eaZtc6P"; //TODO - my token is different then Itay's
 
-void setup() 
+void setup()
 {
   // Initialize serial and wait for port to open:
   Serial.begin(9600);
@@ -96,35 +112,41 @@ void setup()
     ArduinoCloud.update();
     delay(500);
   }
-  
+
   displayState = DISPLAY_CONFIG_LIGHT;
 
   timer.every(MIN_IN_MILIS, checkAndAlertValues);
-  
+
   CARRIER_CASE = true; //TODO - to be changed when done
-  // Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(3,9,144,235), 8080);
+
+  // start Blynk + notify user
+  Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(192, 168, 1, 224), 8080);
+  Blynk.notify("Your plant is being monitored... It will notify you if it needs you :)"); //TODO can change text
+
   carrier.begin();
   sampleData();
+  toggleLightConfig();
 }
 
-void loop() 
-{ 
+void loop()
+{
+  //run Blynk
+  Blynk.run();
+
   carrier.Buttons.update();
   timer.tick();
   ArduinoCloud.update();
-  //TODO - delete
-  // Serial.println(buttonState);
-  
-  if(allowScreenOff && carrier.Button1.getTouch())
+
+  if (allowScreenOff && carrier.Button1.getTouch())
   {
     toggleDisplayState();
   }
   else
   {
-    switch(buttonState)
+    switch (buttonState)
     {
       case 0 :
-        if (carrier.Button2.getTouch()) 
+        if (carrier.Button2.getTouch())
         {
           toggleLightConfig();
         }
@@ -133,29 +155,21 @@ void loop()
           buttonState = 1;
           toggleMoistConfig();
         }
-        else
-        {
-          // printMessage("Light config:\n  2-next\n  3- accept");
-        }
         break;
-    
+
       case 1:
-        if (carrier.Button2.getTouch()) 
+        if (carrier.Button2.getTouch())
         {
           toggleMoistConfig();
         }
-        else if (carrier.Button3.getTouch()) 
+        else if (carrier.Button3.getTouch())
         {
           buttonState = 2;
           allowScreenOff = true;
           // start showing info
         }
-        else
-        {
-        // printMessage("Moist config:\n  2-next\n  3- accept");
-        }
         break;
-  
+
       case 2:
         if (carrier.Button2.getTouch())
         {
@@ -166,19 +180,16 @@ void loop()
         {
           displayPage(NULL);
         }
-        
+
         break;
-      }
+    }
   }
-  
-  
-    
+
   delay(1000);
 }
 
-void resetVars()
-/** Restes all variables used for calculating daily stats **/
-{
+void resetVars(){
+  /** Restes all variables used for calculating daily stats **/
   counter = 0;
   totalLight = 0;
   totalHumidity = 0;
@@ -186,31 +197,31 @@ void resetVars()
 }
 
 
-bool checkAndAlertValues(void *)
-/** This method is called every 1 hour - sample data, run calculation and alert/ update if needed**/
-{
+bool checkAndAlertValues(void *){
+  /** This method is called every 1 hour - sample data, run calculation and alert/ update if needed**/
   sampleData();
-  
+
   // content of the if- else should be changed to the actual action will do
-  if(moistPrecentage > maxMoist)
+  if (moistPrecentage > maxMoist)
   {
     Serial.print(moistPrecentage);
     Serial.println("\% - Too much water bro!");
+    blynkNotify("Too much water bro!");
   }
-  else if(moistPrecentage < minMoist)
+  else if (moistPrecentage < minMoist)
   {
     Serial.print(moistPrecentage);
     Serial.println("\% - Give me some water ASAP!");
+    blynkNotify("Give me some water ASAP!");
   }
-  
+
   updateAverageStats();
-  
+
   return true; // needed for the timer thingy
 }
 
-void sampleData()
-/** Samples data from sensors It is out to alow uses from different locations**/
-{
+void sampleData(){
+  /** Samples data from sensors It is out to alow uses from different locations**/
   if (carrier.Light.colorAvailable())
   {
     int none;//not gonna be used
@@ -222,11 +233,16 @@ void sampleData()
 
   int rawMoistValue = analogRead(MoisterPin);
   moistPrecentage = map(rawMoistValue, AirValue, MoisterValue, 0, 100);
+  
+  //update blynk app
+  Blynk.virtualWrite(temperatureVirtualPin, temperature);
+  Blynk.virtualWrite(humidityVirtualPin, humidity);
+  Blynk.virtualWrite(moistPercVirtualPin, moistPrecentage);
+  Blynk.virtualWrite(lightVirtualPin, light);
 }
 
-void updateAverageStats()
-/** Update avarege states**/
-{
+void updateAverageStats(){
+  /** Update avarege states**/
   if (counter < 24)
   {
     totalLight += light;
@@ -240,60 +256,53 @@ void updateAverageStats()
     averageLight = totalLight / counter;
     averageHumidity = totalHumidity / counter;
     resetVars();
-    //TODO - send some alert if not enough light in the last day?
+    //TODO - send alerts on anamolys
   }
 }
 
-void onAverageTempChange() {
-  // Do something
-}
+void onAverageTempChange() {}
 
-void onAverageLightChange() {
-  // Do something
-}
+void onAverageLightChange() {}
 
-void onAverageHumidityChange() {
-  // Do something
-}
+void onAverageHumidityChange() {}
 
-void setRanges()
-/** set the ranges of required light & soil moister **/
-{
-  switch(lightState)
+void setRanges(){
+  /** set the ranges of required light & soil moister **/
+  switch (lightState)
   {
     case SHADOW_LOVING:
       minLight = 5000;
       maxLight = 10000;
       break;
-      
+
     case BRIGHT_AND_INDIRECT:
       minLight = 10000;
       maxLight = 20000;
       break;
-    
+
     case BRIGHT_LIGHT:
       minLight = 20000;
       maxLight = 45000;
       break;
-      
+
     case STRONG_DIRECT:
       minLight = 45000;
       maxLight = INT_MAX;
       break;
   }
-  
-  switch(moistState)
+
+  switch (moistState)
   {
     case LOVES_WET_SOIL:
       minMoist = 41;
       maxMoist = 80;
       break;
-      
+
     case LOVES_MOIST_SOIL:
       minMoist = 41;
       maxMoist = 60;
       break;
-      
+
     case LOVES_DRY:
       minMoist = 21;
       maxMoist = 40;
@@ -307,35 +316,39 @@ void displayPage(char msg[]) {
       switch (page) {
         case TEMP_PAGE:
           printValue(" Temp", temperature, DISPLAY_DEFAULT);
+          Blynk.virtualWrite(temperatureVirtualPin, temperature);
           break;
         case HUMIDITY_PAGE:
           printValue(" Humi", humidity, DISPLAY_DEFAULT);
+          Blynk.virtualWrite(humidityVirtualPin, humidity);
           break;
         case MOIST_PAGE:
           printValue(" Moist", moistPrecentage, DISPLAY_MOIST);
+          Blynk.virtualWrite(moistPercVirtualPin, moistPrecentage);
           break;
         case LIGHT_PAGE:
           printValue("Light", light, DISPLAY_LIGHT);
+          Blynk.virtualWrite(lightVirtualPin, light);
           break;
         default:
           break;
       }
       page = (page + 1) % 6;
       break;
-      
+
     case DISPLAY_OFF:
       printMessage(msg, false);
       break;
-    }
+  }
 }
 
 void printMessage(char *msg, bool isMoistOrLight) {
-  carrier.display.fillScreen(ST77XX_BLACK); 
+  carrier.display.fillScreen(ST77XX_BLACK);
   carrier.display.setTextColor(ST77XX_WHITE);
   carrier.display.setTextSize(2); //medium sized text
   int x = strlen(msg);
   char *token = strtok(msg, "\n");
-  if(isMoistOrLight)
+  if (isMoistOrLight)
   {
     carrier.display.setCursor(35, 50);
     carrier.display.println("Next - click 2");
@@ -343,14 +356,11 @@ void printMessage(char *msg, bool isMoistOrLight) {
     carrier.display.println("Confirm - click 3");
     x = strlen(token);
     carrier.display.setCursor(0, 110);
-    Serial.println(token);
     carrier.display.println(token);
     msg = strtok(NULL, "\n");
     carrier.display.setTextColor(ST77XX_GREEN);
-    Serial.println(msg);
     x = strlen(msg);
-    Serial.println(msg);
-    
+
   }
   carrier.display.setCursor(0, 140); //sets position for printing (x and y)
   carrier.display.print(msg);
@@ -358,63 +368,66 @@ void printMessage(char *msg, bool isMoistOrLight) {
 
 void printValue(char header[], int val, int displayMode) {
   int min, max;
-  
-  switch(displayMode) {
+
+  switch (displayMode) {
     case DISPLAY_LIGHT:
       min = minLight;
       max = maxLight;
       break;
-    
+
     case DISPLAY_MOIST:
       min = minMoist;
       max = maxMoist;
       break;
-      
+
     default:
       min = -1;
       max = INT_MAX;
       break;
   }
-  
-  
+
+
   if (min > val || max < val) {
     //configuring display, setting background color, text size and text color
-    carrier.display.fillScreen(ST77XX_RED); 
+    carrier.display.fillScreen(ST77XX_RED);
     carrier.display.setTextColor(ST77XX_WHITE); //white text
   }
   else {
-    carrier.display.fillScreen(ST77XX_GREEN); 
+    carrier.display.fillScreen(ST77XX_GREEN);
     carrier.display.setTextColor(ST77XX_BLACK); //black text
   }
-  
+
   carrier.display.setTextSize(3); //medium sized text
   carrier.display.setCursor(20, 110); //sets position for printing (x and y)
   carrier.display.print(header);
   carrier.display.print(": ");
   carrier.display.println(val);
-  
+
   delay(1000);
 }
 
 void toggleDisplayState() {
   char *msg;
-  if (displayState == DISPLAY_ON){
-    msg = "Display off..";
+  if (displayState == DISPLAY_ON) {
+    msg = "    Display off..";
     page = 0;
+    Blynk.virtualWrite(displayVirtualPin, DISPLAY_ON + 1);
   }
   else {
-    msg = "Display on..";
+    msg = "    Display on..";
     page = 1;
+    Blynk.virtualWrite(displayVirtualPin, DISPLAY_OFF + 1);
   }
-  displayState = ((displayState + 1) % 2); 
+  displayState = ((displayState + 1) % 2);
   printMessage(msg, false);
 }
 
 void toggleMoistConfig() {
   moistState = (moistState + 1) % 3;
+  Blynk.virtualWrite(soilConfigVirtualPin, moistState+1);
   setRanges();
   char out[1024] = "   Set moist to:\n";
-  
+
   printMessage(strcat(out, getMoistStr()), true);
   if (displayState < 0) {
     displayState = 1;
@@ -423,6 +436,7 @@ void toggleMoistConfig() {
 
 void toggleLightConfig() {
   lightState = (lightState + 1) % 4;
+  Blynk.virtualWrite(lightConfigVirtualPin, lightState + 1);
   setRanges();
   char out[1024] = "    Set light to:\n";
   printMessage(strcat(out, getLightStr()), true);
@@ -433,7 +447,7 @@ void toggleLightConfig() {
 
 char* getMoistStr() {
   char* res;
-  switch(moistState) {
+  switch (moistState) {
     case LOVES_WET_SOIL:
       res = "      Wet Soil\n";
       break;
@@ -444,14 +458,13 @@ char* getMoistStr() {
       res = "      Dry Soil\n";
       break;
   }
-  
+
   return res;
 }
 
-char* getLightStr()
-{
+char* getLightStr() {
   char* res;
-  switch(lightState) {
+  switch (lightState) {
     case SHADOW_LOVING:
       res = "      Shadowed\n";
       break;
@@ -465,7 +478,94 @@ char* getLightStr()
       res = "    Direct Light\n";
       break;
   }
-  
+
   return res;
 }
 
+BLYNK_WRITE(soilConfigVirtualPin) {//V0
+  /** change moistState from Blynk app **/
+  switch (param.asInt())
+  {
+    case 1:
+      moistState = LOVES_WET_SOIL;
+      Serial.println("Soil config changed to WET SOIL.");
+      break;
+    case 2:
+      moistState = LOVES_MOIST_SOIL;
+      Serial.println("Soil config changed to MOIST SOIL.");
+      break;
+    case 3:
+      moistState = LOVES_DRY;
+      Serial.println("Soil config changed to DRY SOIL.");
+      break;
+    default:
+      Serial.println("Unknown item selected for soil config.");
+  }
+  setRanges();
+}
+
+BLYNK_WRITE(lightConfigVirtualPin){ //V1
+  /** change moistState from Blynk app **/
+  switch (param.asInt())
+  {
+    case 1:
+      lightState = SHADOW_LOVING;
+      Serial.println("Light config changed to SHADOWED.");
+      break;
+    case 2:
+      lightState = BRIGHT_AND_INDIRECT;
+      Serial.println("Light config changed to BRIGHT and INDIRECT.");
+      break;
+    case 3:
+      lightState = BRIGHT_LIGHT;
+      Serial.println("Light config changed to BRIGHT LIGHT.");
+      break;
+    case 4:
+      lightState = STRONG_DIRECT;
+      Serial.println("Light config changed to DIRECT LIGHT.");
+      break;
+    default:
+      Serial.println("Unknown item selected for light config");
+  }
+  setRanges();
+}
+
+BLYNK_WRITE(displayVirtualPin){//V2 
+  /** Blynk on/off for device display **/
+  switch (param.asInt())
+  {
+    case 0:
+      displayState = DISPLAY_OFF;
+      Serial.println("Turnning off device display.");
+      break;
+    case 1:
+      displayState = DISPLAY_ON;
+      Serial.println("Turnning on device display.");
+      break;
+  }
+}
+
+BLYNK_WRITE(notificationPin){
+  /** Blynk on/off for notification display **/
+  switch (param.asInt())
+  {
+    case 0:
+      showNotification = false;
+      Blynk.virtualWrite(notificationPin, NOTIFICATION_OFF);
+      Serial.println("Turnning off notification.");
+      break;
+    case 1:
+      showNotification = true;
+      Blynk.virtualWrite(notificationPin, NOTIFICATION_ON);
+      Serial.println("Turnning on notification.");
+      break;
+  }
+}
+
+void blynkNotify(char *str){
+  // will notify in app only if allowed notificaiton
+  if(showNotification)
+  {
+    Blynk.notify(str);
+  }
+}
