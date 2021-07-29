@@ -21,7 +21,7 @@
 #define MoisterValue 700
 #define MoisterPin A5
 #define HOUR_IN_MILIS 3600000
-#define MIN_IN_MILIS 60000
+#define MIN_IN_MILIS 5000//60000
 #define INT_MAX 2147483647
 
 
@@ -30,6 +30,7 @@
 #define lightConfigVirtualPin V1
 #define displayVirtualPin V2
 #define notificationPin V3
+#define lcdWidgetPin V4
 #define humidityVirtualPin V5
 #define temperatureVirtualPin V6
 #define lightVirtualPin V7
@@ -38,8 +39,15 @@
 #define averageLightVirtualPin V10
 #define averageHumidityVirtualPin V11
 
+//Blynk colors
+#define BLYNK_GREEN     "#23C48E"
+#define BLYNK_BLUE      "#04C0F8"
+#define BLYNK_YELLOW    "#ED9D00"
+#define BLYNK_RED       "#D3435C"
 
 MKRIoTCarrier carrier;
+WidgetLCD lcd(lcdWidgetPin);
+WidgetLED led1(lightVirtualPin);
 
 // Globals
 int counter = 0;
@@ -88,7 +96,7 @@ auto timer = timer_create_default();
 //define the globals with the min/max values for moister & light
 int minLight, maxLight, minMoist, maxMoist;
 
-char blynkAuthToken[] = "pnr6Z7Usxd8d9gGMoUrSrQ917eaZtc6P"; //TODO - my token is different then Itay's
+char blynkAuthToken[] = "ykQawHm2DzDZ6MuIRYrKBiY3uQWRyBfS"; //TODO - my token is different then Itay's
 
 void setup()
 {
@@ -122,7 +130,8 @@ void setup()
   // start Blynk + notify user
   Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(192, 168, 1, 224), 8080);
   Blynk.notify("Your plant is being monitored... It will notify you if it needs you :)"); //TODO can change text
-
+  lcd.clear();
+  lcd.print(0,0,"testing");
   carrier.begin();
   sampleData();
   toggleLightConfig();
@@ -226,6 +235,7 @@ void sampleData(){
   {
     int none;//not gonna be used
     carrier.Light.readColor(none,  none,  none, light);
+    lightLEDIndicator(light);
   }
 
   temperature = carrier.Env.readTemperature();
@@ -238,7 +248,24 @@ void sampleData(){
   Blynk.virtualWrite(temperatureVirtualPin, temperature);
   Blynk.virtualWrite(humidityVirtualPin, humidity);
   Blynk.virtualWrite(moistPercVirtualPin, moistPrecentage);
-  Blynk.virtualWrite(lightVirtualPin, light);
+  // Blynk.virtualWrite(lightVirtualPin, light); //unused
+}
+
+void lightLEDIndicator(int l){
+  /** updates the light LED indicator in Blynk **/
+
+  if(l < minLight){
+    Blynk.setProperty(lightVirtualPin, "color", BLYNK_RED);
+    led1.setValue(map(light, 1, minLight, 10, 255));
+  }
+  else if(l > maxLight){
+    Blynk.setProperty(lightVirtualPin, "color", BLYNK_RED);
+    led1.setValue(map(light, maxLight, INT_MAX, 10, 255));
+  }
+  else{
+    Blynk.setProperty(lightVirtualPin, "color", BLYNK_GREEN);
+    led1.setValue(map(light, minLight, maxLight, 10, 255));
+  }
 }
 
 void updateAverageStats(){
@@ -256,7 +283,23 @@ void updateAverageStats(){
     averageLight = totalLight / counter;
     averageHumidity = totalHumidity / counter;
     resetVars();
-    //TODO - send alerts on anamolys
+    
+    Blynk.virtualWrite(averageTempVirtualPin, averageTemp);
+    Blynk.virtualWrite(averageHumidityVirtualPin, averageHumidity);
+    writeAvgLight(averageLight);
+  }
+}
+
+void writeAvgLight(int l){
+  lcd.clear();
+  if(l < minLight){
+    lcd.print(0,0, "Not enough light yesterday!");
+  }
+  else if(l > maxLight){
+    lcd.print(0,0, "Too much light yesterday!");
+  }
+  else{
+    lcd.print(0,0, "Just enough sunlight");
   }
 }
 
@@ -327,7 +370,7 @@ void displayPage(char msg[]) {
           Blynk.virtualWrite(moistPercVirtualPin, moistPrecentage);
           break;
         case LIGHT_PAGE:
-          printValue("Light", light, DISPLAY_LIGHT);
+          printValue(" Light", light, DISPLAY_LIGHT);
           Blynk.virtualWrite(lightVirtualPin, light);
           break;
         default:
