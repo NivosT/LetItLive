@@ -58,7 +58,7 @@ int displayState = -2;
 int moistState = 0;
 int lightState = 0;
 int page = 0;
-bool showNotification = true;
+bool showNotification = false;
 
 //Enums
 const int LIGHT_CONFIG = -1;
