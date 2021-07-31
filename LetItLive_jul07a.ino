@@ -96,7 +96,7 @@ auto timer = timer_create_default();
 //define the globals with the min/max values for moister & light
 int minLight, maxLight, minMoist, maxMoist;
 
-char blynkAuthToken[] = "ykQawHm2DzDZ6MuIRYrKBiY3uQWRyBfS"; //TODO - my token is different then Itay's
+char blynkAuthToken[] = "ykQawHm2DzDZ6MuIRYrKBiY3uQWRyBfS"; //Needs to be changed to the exact device in Blynk
 
 void setup()
 {
@@ -125,11 +125,11 @@ void setup()
 
   timer.every(MIN_IN_MILIS, checkAndAlertValues);
 
-  CARRIER_CASE = true; //TODO - to be changed when done
+  CARRIER_CASE = true; 
 
   // start Blynk + notify user
-  Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(192, 168, 1, 224), 8080);
-  Blynk.notify("Your plant is being monitored... It will notify you if it needs you :)"); //TODO can change text
+  Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(192, 168, 1, 224), 8080); // Change IP to server's address
+  Blynk.notify("Your plant is being monitored... It will notify you if it needs you :)"); 
   lcd.clear();
   lcd.print(0,0,"testing");
   carrier.begin();
