@@ -17,13 +17,16 @@
 #include <WiFiNINA.h>
 #include <BlynkSimpleWiFiNINA.h>
 
+//Sensor pin
+#define MoisterPin A5
+
+//Max-Min ranges for calibrating the MOIST sensor 
 #define AirValue 1023
 #define MoisterValue 700
-#define MoisterPin A5
-#define HOUR_IN_MILIS 3600000
-#define MIN_IN_MILIS 5000//60000
-#define INT_MAX 2147483647
 
+// other general consts
+#define HOUR_IN_MILIS 3600000
+#define INT_MAX 2147483647
 
 // Pins for Blynk
 #define soilConfigVirtualPin V0
@@ -39,7 +42,7 @@
 #define averageLightVirtualPin V10
 #define averageHumidityVirtualPin V11
 
-//Blynk colors
+//Blynk color consts
 #define BLYNK_GREEN     "#23C48E"
 #define BLYNK_BLUE      "#04C0F8"
 #define BLYNK_YELLOW    "#ED9D00"
@@ -96,7 +99,7 @@ auto timer = timer_create_default();
 //define the globals with the min/max values for moister & light
 int minLight, maxLight, minMoist, maxMoist;
 
-char blynkAuthToken[] = "ykQawHm2DzDZ6MuIRYrKBiY3uQWRyBfS"; //Needs to be changed to the exact device in Blynk
+char blynkAuthToken[] = "ykQawHm2DzDZ6MuIRYrKBiY3uQWRyBfS"; //Needs to be changed according to your blynk auth code
 
 void setup()
 {
@@ -121,17 +124,17 @@ void setup()
     delay(500);
   }
 
-  displayState = DISPLAY_CONFIG_LIGHT;
+  displayState = DISPLAY_CONFIG_LIGHT; 
 
-  timer.every(MIN_IN_MILIS, checkAndAlertValues);
+  timer.every(HOUR_IN_MILIS, checkAndAlertValues); // call checkAndAlertValues() every hour
 
   CARRIER_CASE = true; 
 
   // start Blynk + notify user
-  Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(192, 168, 1, 224), 8080); // Change IP to server's address
+  Blynk.begin(blynkAuthToken, SSID, PASS, IPAddress(192, 168, 1, 224), 8080); // If you use a non-local server, change to the server's IP address
   Blynk.notify("Your plant is being monitored... It will notify you if it needs you :)"); 
   lcd.clear();
-  lcd.print(0,0,"testing");
+  lcd.print(0,0,"No history for now.");
   carrier.begin();
   sampleData();
   toggleLightConfig();
@@ -207,7 +210,7 @@ void resetVars(){
 
 
 bool checkAndAlertValues(void *){
-  /** This method is called every 1 hour - sample data, run calculation and alert/ update if needed**/
+  /** This method is called every 1 hour - sample data, run calculation and alert.**/
   sampleData();
 
   // content of the if- else should be changed to the actual action will do
@@ -244,32 +247,38 @@ void sampleData(){
   int rawMoistValue = analogRead(MoisterPin);
   moistPrecentage = map(rawMoistValue, AirValue, MoisterValue, 0, 100);
   
-  //update blynk app
+  //update blynk app stats
   Blynk.virtualWrite(temperatureVirtualPin, temperature);
   Blynk.virtualWrite(humidityVirtualPin, humidity);
   Blynk.virtualWrite(moistPercVirtualPin, moistPrecentage);
-  // Blynk.virtualWrite(lightVirtualPin, light); //unused
 }
 
 void lightLEDIndicator(int l){
-  /** updates the light LED indicator in Blynk **/
+  /** updates the light LED indicator in Blynk
+  ** changes color and intensity of led indicator in blynk app according to the sampled light amount
+  ** Red - means out of range light, where the brighter the led the further the value from the min/max required values
+  ** Green - In range light values, the brighter it is-> the more light in range.
+  **/
 
   if(l < minLight){
     Blynk.setProperty(lightVirtualPin, "color", BLYNK_RED);
-    led1.setValue(map(light, 1, minLight, 10, 255));
+    led1.setValue(map(light, 100, minLight, 255, 100));
   }
   else if(l > maxLight){
     Blynk.setProperty(lightVirtualPin, "color", BLYNK_RED);
-    led1.setValue(map(light, maxLight, INT_MAX, 10, 255));
+    led1.setValue(map(light, maxLight, INT_MAX, 100, 255));
   }
   else{
     Blynk.setProperty(lightVirtualPin, "color", BLYNK_GREEN);
-    led1.setValue(map(light, minLight, maxLight, 10, 255));
+    led1.setValue(map(light, minLight, maxLight, 255, 100));
   }
 }
 
 void updateAverageStats(){
-  /** Update avarege states**/
+  /** Update avarege states
+  ** Once counter == 24, calculates the average and reset temp variables
+  ** and send info to Blynk
+  **/
   if (counter < 24)
   {
     totalLight += light;
@@ -291,6 +300,9 @@ void updateAverageStats(){
 }
 
 void writeAvgLight(int l){
+  /**
+  ** Writes to the LCD widget a message regarding the prev day light amount.
+  **/
   lcd.clear();
   if(l < minLight){
     lcd.print(0,0, "Not enough light yesterday!");
@@ -310,7 +322,7 @@ void onAverageLightChange() {}
 void onAverageHumidityChange() {}
 
 void setRanges(){
-  /** set the ranges of required light & soil moister **/
+  /** set the ranges of required light & soil moister according to the type **/
   switch (lightState)
   {
     case SHADOW_LOVING:
@@ -354,6 +366,9 @@ void setRanges(){
 }
 
 void displayPage(char msg[]) {
+  /**
+  ** Displays current stats on the carrier screen & in the Blynk screen
+  **/
   switch (displayState) {
     case DISPLAY_ON:
       switch (page) {
@@ -386,6 +401,9 @@ void displayPage(char msg[]) {
 }
 
 void printMessage(char *msg, bool isMoistOrLight) {
+  /**
+  ** A method for formatting and printing config messages to carrier screen.
+  **/
   carrier.display.fillScreen(ST77XX_BLACK);
   carrier.display.setTextColor(ST77XX_WHITE);
   carrier.display.setTextSize(2); //medium sized text
@@ -410,6 +428,11 @@ void printMessage(char *msg, bool isMoistOrLight) {
 }
 
 void printValue(char header[], int val, int displayMode) {
+  /** 
+  ** A method for formatting and printing sensor stats on carrier screen.
+  ** Green background- in value parameters.
+  ** Red backgrounbd - out of range value parameters.
+  **/
   int min, max;
 
   switch (displayMode) {
@@ -450,6 +473,10 @@ void printValue(char header[], int val, int displayMode) {
 }
 
 void toggleDisplayState() {
+  /**
+  ** toggels between on/off display on carrier screen.
+  ** toggels according to the carrier buttons inputs but also change status in the App,
+  **/
   char *msg;
   if (displayState == DISPLAY_ON) {
     msg = "    Display off..";
@@ -466,6 +493,9 @@ void toggleDisplayState() {
 }
 
 void toggleMoistConfig() {
+  /** 
+  ** Changes the current moist config according to the carrier input and sync it in the App
+  **/
   moistState = (moistState + 1) % 3;
   Blynk.virtualWrite(soilConfigVirtualPin, moistState+1);
   setRanges();
@@ -478,6 +508,9 @@ void toggleMoistConfig() {
 }
 
 void toggleLightConfig() {
+    /** 
+  ** Changes the current light config according to the carrier input and sync it in the App
+  **/
   lightState = (lightState + 1) % 4;
   Blynk.virtualWrite(lightConfigVirtualPin, lightState + 1);
   setRanges();
@@ -489,6 +522,7 @@ void toggleLightConfig() {
 }
 
 char* getMoistStr() {
+  /** Create the relevant display string accordind to the config enum **/
   char* res;
   switch (moistState) {
     case LOVES_WET_SOIL:
@@ -506,6 +540,7 @@ char* getMoistStr() {
 }
 
 char* getLightStr() {
+  /** Create the relevant display string accordind to the config enum **/
   char* res;
   switch (lightState) {
     case SHADOW_LOVING:
