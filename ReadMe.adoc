@@ -3,27 +3,36 @@
 :Date: 07/07/2021
 :Revision: version#
 :License: Public Domain
+:imagesdir:
 
-= Project: {Project}
+= Project: Let it Live
 
-Describe your project
+The project is about making sure your houseplant receives proper care. 
+By placing our device/s in different plants around the house, collecting data about the sunlight and soil moisture, 
+we can monitor these properties and alert the user when his plant needs some special care.
+
+While Noa was house-sitting her friend’s house, she might have killed a plant or two. While it was a tragedy, an idea 
+was born. If only there was something or someone who could tell her it is time to take care of the plants, many plant life would have been spared! 
+
+Our implementation would place the (device) inside the plant’s pot, the devices would need to be connected to the house’s wifi network and connect remotely to a monitoring dashboard in the Arduino cloud. The user will physically set the size/type of plant the device is placed in, and immediately the data would stream to the cloud.
+
 
 == Step 1: Installation
-Please describe the steps to install this project.
 
-For example:
+1. Create a new thing in you Arduino IoT cloud (or two, but this implementation currently only supports up to 2 devices)
+2. Add the variables found in thingProperties.h (inside the initProperties() function).
+3. If an arduino dashboard is desired-
+   I)  Go to the dashboard tab and create a new dashboard.
+   II) Choose ADD -> Widgets and for each device add the widgets "Percentage" linked to humidity & moistPrecentage, "Guage" linked to temperature 
+       and "Chart" for each of the "average_" variables, and arrange as you desire.
+4. If you want to use a Blynk app:
+   I)  Install "Blynk(legacy)" from appStore / Google store.
+   II) Log in and choose the scan QR symbol and scan:
 
-1. Open this file
-2. Edit as you like
-3. Release to the World!
+image::BlynkClone.jpg[asd]
+   III) In the ip address put an IP address of ypur server (Blynk server, local server or some stand alone server).
+   IV)  Copy the auth code of the app and paste where the code says so. Also write the same IP you used to log in the project.
 
-== Step 2: Assemble the circuit
-
-Assemble the circuit following the diagram layout.png attached to the sketch
-
-== Step 3: Load the code
-
-Upload the code contained in this sketch on to your board
 
 === Folder structure
 
